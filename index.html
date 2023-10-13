@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+
+<title>The Lord | Web Game</title>
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<script src="js/scripts.js"></script>
+
+<style>
+.main dl
+{
+	display: inline-grid;
+    grid-template-columns: auto auto;
+	margin: 0px;
+}
+
+.main dl dd, .main dl dt{margin: 0px; padding: 5px;}
+
+.main dl dd{}
+
+.main dl dt{display: flex; align-items: center;}
+
+.main dd dt, .main dd dd{border-right: 1px solid; border-bottom: 1px solid;}
+
+.main dd dl{border-top: 1px solid; border-left: 1px solid;}
+
+header .status{}
+header .status .indicator{
+display: inline-block;
+    width: 16px;
+    height: 16px;
+    background-color: #ffeb3b;
+    border-radius: 50%;
+	border: 1px solid silver}
+	
+.footer .resources{
+	display: grid;
+    grid-template-columns: 120px 20px;
+}
+
+ul li button {
+    margin-left: 5px;
+}
+</style>
+
+</head>
+<body>
+
+<header><span class="status">Status: <span class="indicator"></span></span></header>
+
+<div class="main" id="main">
+
+</div>
+<div class="msg" id="msg"></div>
+<footer id="footer" class="footer"></footer>
+
+</body>
+
+<script>
+var attributes = {str: 10, agi: 10};
+var skills = {mining: 1, lamber: 1};
+//var objtypes = {mine}
+var colors = {red: '#ff5722', yellow: '#ffeb3b', green: '#4caf50'};
+
+var Character = function(data, left = false){
+	this.name = '';
+	this.attr  = Ocopy(attributes);
+	this.skill  = Ocopy(skills);
+	this.progress = 0;
+	if(data !== undefined) Oset(this, data, left);	
+}
+
+var MapObj = function(data, left = false)
+{
+	this.tip = 'mine';
+	this.res = 'ore';
+	this.resources = {};
+	this.name = '';
+	this.harm = 1;
+	this.deep = 10;
+	this.amount = 1000;
+	if(data !== undefined) Oset(this, data, left);
+}
+
+//path {loc: {}, time: int}
+
+var Location = function()
+{
+	this.char = [];
+	this.obj = [];
+	this.path = [];
+}
+
+var Resource = function(data)
+{
+	this.state = '';
+	this.element = '';
+	this.kind = '';
+	this.name = '';
+	this.quality = 1;
+	this.child = null;
+	if(data !== undefined) Oset(this, data);
+}
+/*
+var recources = {};
+let r = resources;
+r.ore = new Resource({kind: 'ore', name: 'iron ore'}), wood: 0, iron: 0, desk: 0, gold: 0, };
+*/
+
+var World = function()
+{
+	this.loc = [];
+	var that = this;
+	
+	this.player = {
+		resources: {}
+	}
+	
+	this.addLoc = function()
+	{
+		let id = this.loc.push(new Location()) - 1;
+		this.loc[id].id = id;
+	}
+	
+	this.addChar = function(loc_id, data = {}, player = 0)
+	{
+		if(loc_id<0 || loc_id>=this.loc.length) return false;
+		let c = new Character(data);
+		c.loc = this.loc[loc_id];
+		c.obj = null;
+		c.player = player;
+		this.loc[loc_id].char.add(c);
+		return true;		
+	}
+	
+	this.addObj = function(loc_id, data = {})
+	{
+		if(loc_id<0 || loc_id>=this.loc.length) return false;
+		let o = new MapObj(data);
+		o.char = [];
+		o.loc = loc_id;
+		let i = this.loc[loc_id].obj.add(o);
+		this.loc[loc_id].obj[i].id = i;
+		return true;
+	}	
+	
+	Location.prototype.charGoToobj = function(char_id, obj_id, permanent = false)
+	{
+		if(this.char.length<=0 || this.char.length<=char_id) return {r: 0, a: 'error'};
+		if(this.obj.length<=0 || this.obj.length<=obj_id) return {r: 0, a: 'error'};
+		
+		//set at obj
+		let newid = this.obj[obj_id].char.add(this.char[char_id]);
+		this.obj[obj_id].char[newid].id = newid;
+		this.obj[obj_id].char[newid].obj = obj_id;
+		
+		//remove from loc
+		this.char.remove(char_id);
+		var obj = this.obj[obj_id];
+		var loc = this.id;
+		
+		return {r: 1, a: 'success'};
+	}
+	
+	MapObj.prototype.getOffChar = function(char_id)
+	{
+		if(this.char.length<=0 || this.char.length<=char_id) return {r: 0, a: 'error'};
+		
+		//to loc
+		let newid = that.loc[this.loc].char.add(this.char[char_id]);
+		that.loc[this.loc].char[newid].id = newid;
+		that.loc[this.loc].char[newid].obj = null;
+		that.loc[this.loc].char[newid].progress = 0;
+		//clearInterval(that.loc[this.loc].char[newid].timer);
+		//that.loc[this.loc].char[newid].timer = null;
+		//delete from obj
+		this.char.remove(char_id);
+		return {r: 1, a: 'success'};
+	}
+	
+
+	
+	this.charWorkInObjResults = function(char_id, obj)
+	{
+		if(obj.tip == 'mine')
+		{
+			
+			if(obj.resources !== undefined){
+				let mined = {};
+				let keys = Object.keys(obj.resources);
+				for (let key of keys) {
+					let v = Math.floor((Math.random() * obj.resources[key]) + 1);
+					if (v == obj.resources[key])
+					{
+						mined[key] = 1;
+					}
+				}
+				
+				let mkeys = Object.keys(mined);
+				for (let mkey of mkeys) {
+					that.player.resources[mkey] += mined[mkey];
+				}
+				
+			}
+			
+			obj.char[char_id].attr.str += 1;
+			slog(obj.char[char_id].name +' done job in '+obj.res+' '+obj.tip);
+		}
+	}
+	
+	this.render_char = function(char)
+	{
+		var main = document.getElementById('main');
+		let c = new Character(char, true);
+		main.innerHTML = renderO(c);
+		
+		let p = document.createElement("p");
+		
+		let b = document.createElement("BUTTON");
+		b.innerHTML = 'location';
+		b.onclick = function(){that.renderLocation(char.loc);}
+		
+		p.appendChild(b);
+		main.appendChild(p);
+				
+		
+	}
+
+	this.render_object = function(obj, el)
+	{
+		let s = '';
+		if(obj.tip=='mine') s += obj.name+' '+obj.res+' '+obj.tip;
+		if(obj.tip=='forest') s += obj.name+' '+obj.tip;
+		let d = document.createElement("DIV");
+		d.innerHTML = s;
+		el.appendChild(d);
+		let  loc = this.loc[obj.loc];
+		
+		//is there any heroes at all
+		if(loc.char.length<=0 && obj.char.length<=0){
+			let p = document.createElement("P"); p.innerHTML = 'no heroes'; el.appendChild(p);  return false;
+		}
+		
+		//we have heroes on loc
+		
+		//who is inside
+		if(obj.char === undefined || obj.char.length<=0) 
+		{
+			let p = document.createElement("P"); p.innerHTML = 'nobody inside'; el.appendChild(p);
+		}
+		else
+		{
+			let p = document.createElement("P"); p.innerHTML = 'heroes inside'; el.appendChild(p);
+			let ul = document.createElement("UL");
+			for(let i=0; i<obj.char.length; i++)
+			{
+				if(obj.char[i]==undefined) continue;
+				let li = document.createElement("LI");
+				li.innerHTML = obj.char[i].name;
+				let b = document.createElement("BUTTON");
+				b.innerHTML = 'recall';
+				b.onclick = function(){let res = obj.getOffChar(i); slog(res); that.renderLocation(obj.loc);}
+				li.appendChild(b);
+				ul.appendChild(li);
+			}
+			el.appendChild(ul);
+		}
+		
+		
+		return s;
+	}
+	
+	this.render_footer = function()
+	{
+		//resources
+		var footer = document.getElementById('footer');
+		let s = '<div class="resources">';
+		
+		const keys = Object.keys(that.player.resources);
+		for (const rid of keys) {
+			res = that.player.resources[rid];
+			s += '<div>' + that.resources[rid].name + ': </div><div>' + res + '</div>';
+		}
+		footer.innerHTML = s;
+	}
+
+	this.renderLocation = function(loc)
+	{
+		var main = document.getElementById('main');
+		//let s = '';
+		main.innerHTML = '';
+
+		if(typeof loc == 'number') loc = this.loc[loc];
+		
+		
+
+		for(let i=0; i<loc.obj.length; i++)
+		{
+			this.render_object(loc.obj[i], main);
+		}
+		
+		//render free heroes
+		
+		//who is free
+		
+		if(loc.char.length <= 0)
+		{
+			let p = document.createElement("P"); p.innerHTML = 'no free heroes'; main.appendChild(p);
+		}
+		else
+		{
+			let p = document.createElement("P"); p.innerHTML = 'free heroes'; main.appendChild(p);
+			for(let i=0; i<loc.char.length; i++)
+			{
+				let ul = document.createElement("UL");
+				for(let i=0; i<loc.char.length; i++)
+				{
+					if(loc.char[i]==undefined) continue;
+					let li = document.createElement("LI");
+					let ss = loc.char[i].name;					
+					 li.append(ss);
+					 
+					 let btn0 = document.createElement("BUTTON");
+					  btn0.innerHTML = 'info';
+					  btn0.onclick = function(){that.render_char(loc.char[i]);};
+					  li.appendChild(btn0);
+					 
+					  for(let j = 0; j<loc.obj.length; j++){
+					 let btn = document.createElement("BUTTON");
+					  btn.innerHTML = 'send to '+loc.obj[j].res+' '+loc.obj[j].tip+' '+loc.obj[j].name;
+					  btn.onclick = function(){let res =  loc.charGoToobj(i, j, true); slog(res); that.renderLocation(loc);};
+					  li.appendChild(btn);
+					}
+					ul.appendChild(li);
+				}
+				main.appendChild(ul);
+			}
+		}
+		
+		this.render_footer();
+
+		//main.innerHTML = s;
+	}
+	
+	this.process = function()
+	{
+		//loop free charse
+		////set progress to 0
+		for(let l=0; l<that.loc.length; l++)
+		{
+			for(let c=0; c<that.loc[l].char.length; c++)
+			{
+				that.loc[l].char[c].progress = 0;
+			}
+		}
+		
+		//loop busy chars
+		////increment progress
+		////check if job is finished
+		for(let l=0; l<that.loc.length; l++)
+		{
+			for(let o=0; o<that.loc[l].obj.length; o++)
+			{
+				for(let c=0; c<that.loc[l].obj[o].char.length; c++)
+				{
+					
+					let ch = that.loc[l].obj[o].char[c];
+					
+					if(ch==undefined) continue;
+					
+					ch.progress += 1;
+
+					if(ch.progress == 10)
+					{
+						that.charWorkInObjResults(c, that.loc[l].obj[o]);
+						ch.progress = 0;
+					}
+				}
+			}			
+		}
+	}
+	
+	this.timer = null;
+	
+	this.start = function()
+	{
+		that.timer = setInterval(function(){that.process()}, 100);
+		document.querySelector("header .status .indicator").style.backgroundColor = colors.green;
+	}
+	
+	this.stop = function()
+	{
+		clearInterval(that.timer);
+		that.timer = null;
+		document.querySelector("header .status .indicator").style.backgroundColor = colors.red;
+	}
+	
+	this.resources = {};
+	
+	this.resources['iron_ore'] = new Resource({state: 'ore', element: 'iron', kind: 'metal', name: 'iron ore'});
+	this.resources['iron_ingot'] = new Resource({state: 'ingot', element: 'iron', kind: 'metal', name: 'iron ingot'});
+	this.resources['wooden_log'] = new Resource({state: 'log', element: 'wood', kind: 'wood', name: 'wooden log'});
+	this.resources['wooden_plank'] = new Resource({state: 'plank', element: 'wood', kind: 'wood', name: 'wooden plank'});
+	this.resources['blue_diamond'] = new Resource({state: 'raw stone', element: 'diamond', kind: 'gem', name: 'blue diamond'});
+	
+	let keys = Object.keys(this.resources);
+	for (let key of keys) {
+		this.player.resources[key] = 0;
+	}
+}
+
+var w = new World();
+
+w.addLoc();
+
+w.addChar(0, {name: 'sasha'}, 1);
+
+w.addObj(0, {resources: {iron_ore: 1, blue_diamond: 10}});
+
+var renderO = function(obj)
+{
+	var s = '<dl>';
+	let keys = Object.keys(obj)
+		for (const key of keys) {
+		  if(typeof obj[key] != "object") s += '<dt>'+key+'</dt><dd>'+obj[key]+'</dd>';
+		  else {
+			s += '<dt>'+key+'</dt><dd>'+renderO(obj[key])+'</dd>';
+		  };
+		}
+	s += '</dl>';
+	return s;
+}
+
+var pushmsg = function(msg)
+{
+	var el = document.getElementById('msg');
+	el.innerHTML = msg;
+	return true;
+}
+
+
+
+var mine_result = function(char, mine)
+{
+	
+}
+
+//w.render_char(w.loc[0].char[0]);
+w.renderLocation(0);
+</script>
+</html>
